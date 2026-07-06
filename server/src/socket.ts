@@ -1,6 +1,7 @@
 import { Server as SocketIOServer, Socket } from 'socket.io';
 import { Server as HTTPServer } from 'http';
 import jwt from 'jsonwebtoken';
+import prisma from './config/prisma';
 
 interface SocketUser {
   id: string;
@@ -57,28 +58,58 @@ export const initSocket = (httpServer: HTTPServer): SocketIOServer => {
     socket.join(`user:${user.id}`);
     console.log(`🔌 [Socket.IO] User connected: ${user.name} (${user.id})`);
 
-    // Handle joining workspace room
-    socket.on('join:workspace', (workspaceId: string) => {
-      if (!workspaceId) return;
-      const room = `workspace:${workspaceId}`;
-      socket.join(room);
+    // Handle joining workspace room with membership authorization
+    socket.on('join:workspace', async (workspaceId: string, ack?: (res: { success: boolean; error?: string }) => void) => {
+      try {
+        if (!workspaceId) {
+          ack?.({ success: false, error: 'Workspace ID required' });
+          return;
+        }
 
-      // Track presence
-      if (!onlinePresence.has(workspaceId)) {
-        onlinePresence.set(workspaceId, new Map());
-      }
-      const workspaceUsers = onlinePresence.get(workspaceId)!;
-      const existing = workspaceUsers.get(user.id);
-      if (existing) {
-        existing.count += 1;
-      } else {
-        workspaceUsers.set(user.id, { ...user, count: 1 });
-      }
+        // Verify membership in database
+        const membership = await prisma.workspaceMember.findUnique({
+          where: {
+            workspaceId_userId: {
+              workspaceId,
+              userId: user.id,
+            },
+          },
+        });
 
-      // Broadcast updated active presence list
-      const activeList = Array.from(workspaceUsers.values()).map(({ count, ...u }) => u);
-      io?.to(room).emit('presence:update', { workspaceId, users: activeList });
-      console.log(`👥 [Presence] ${user.name} joined ${room}`);
+        if (!membership) {
+          console.warn(`🔒 [Socket.IO Auth] Access denied: User ${user.name} (${user.id}) attempted to join unauthorized workspace room ${workspaceId}`);
+          socket.emit('error:unauthorized', {
+            message: 'You are not a member of this workspace',
+            workspaceId,
+          });
+          ack?.({ success: false, error: 'Unauthorized: Not a member of this workspace' });
+          return;
+        }
+
+        const room = `workspace:${workspaceId}`;
+        socket.join(room);
+
+        // Track presence
+        if (!onlinePresence.has(workspaceId)) {
+          onlinePresence.set(workspaceId, new Map());
+        }
+        const workspaceUsers = onlinePresence.get(workspaceId)!;
+        const existing = workspaceUsers.get(user.id);
+        if (existing) {
+          existing.count += 1;
+        } else {
+          workspaceUsers.set(user.id, { ...user, count: 1 });
+        }
+
+        // Broadcast updated active presence list
+        const activeList = Array.from(workspaceUsers.values()).map(({ count, ...u }) => u);
+        io?.to(room).emit('presence:update', { workspaceId, users: activeList });
+        ack?.({ success: true });
+        console.log(`👥 [Presence] ${user.name} joined ${room}`);
+      } catch (err) {
+        console.error('[Socket.IO] Error in join:workspace:', err);
+        ack?.({ success: false, error: 'Internal server error joining workspace' });
+      }
     });
 
     // Handle leaving workspace room
@@ -99,10 +130,50 @@ export const initSocket = (httpServer: HTTPServer): SocketIOServer => {
       }
     });
 
-    // Handle joining project room
-    socket.on('join:project', (projectId: string) => {
-      if (!projectId) return;
-      socket.join(`project:${projectId}`);
+    // Handle joining project room with workspace membership authorization
+    socket.on('join:project', async (projectId: string, ack?: (res: { success: boolean; error?: string }) => void) => {
+      try {
+        if (!projectId) {
+          ack?.({ success: false, error: 'Project ID required' });
+          return;
+        }
+
+        const project = await prisma.project.findUnique({
+          where: { id: projectId },
+          select: { id: true, workspaceId: true },
+        });
+
+        if (!project) {
+          socket.emit('error:notFound', { message: 'Project not found', projectId });
+          ack?.({ success: false, error: 'Project not found' });
+          return;
+        }
+
+        const membership = await prisma.workspaceMember.findUnique({
+          where: {
+            workspaceId_userId: {
+              workspaceId: project.workspaceId,
+              userId: user.id,
+            },
+          },
+        });
+
+        if (!membership) {
+          console.warn(`🔒 [Socket.IO Auth] Access denied: User ${user.name} (${user.id}) attempted to join unauthorized project room ${projectId}`);
+          socket.emit('error:unauthorized', {
+            message: 'You are not a member of this project workspace',
+            projectId,
+          });
+          ack?.({ success: false, error: 'Unauthorized: Not a member of this project' });
+          return;
+        }
+
+        socket.join(`project:${projectId}`);
+        ack?.({ success: true });
+      } catch (err) {
+        console.error('[Socket.IO] Error in join:project:', err);
+        ack?.({ success: false, error: 'Internal server error joining project' });
+      }
     });
 
     socket.on('leave:project', (projectId: string) => {

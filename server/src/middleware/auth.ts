@@ -7,6 +7,10 @@ export interface AuthRequest extends Request {
     email: string;
     name: string;
   };
+  workspaceMembership?: {
+    workspaceId: string;
+    role: string;
+  };
 }
 
 interface JwtPayload {

@@ -77,3 +77,32 @@ export const scheduleTaskReminder = async (data: ReminderJobData): Promise<void>
     console.warn('[BullMQ Queue Warning] Could not schedule reminder job:', (err as Error).message);
   }
 };
+
+/**
+ * Cancel and remove any scheduled reminder job for a task
+ */
+export const cancelTaskReminder = async (taskId: string): Promise<boolean> => {
+  try {
+    const queue = getReminderQueue();
+    if (!queue) {
+      console.log(`ℹ️ [BullMQ Queue] Redis queue offline - skipping cancel reminder for task ${taskId}`);
+      return false;
+    }
+
+    const jobId = `reminder-${taskId}`;
+    const job = await queue.getJob(jobId);
+    if (job) {
+      await job.remove();
+      console.log(`🗑️ [BullMQ Queue] Successfully removed reminder job ${jobId}`);
+      return true;
+    }
+
+    // Direct removal fallback if job is in delayed queue
+    await queue.remove(jobId).catch(() => {});
+    return true;
+  } catch (err) {
+    console.warn(`[BullMQ Queue Warning] Failed to cancel reminder for task ${taskId}:`, (err as Error).message);
+    return false;
+  }
+};
+
