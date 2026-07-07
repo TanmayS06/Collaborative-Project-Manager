@@ -41,10 +41,22 @@ export const initReminderWorker = (): Worker<ReminderJobData> | null => {
           return;
         }
 
+        if (!task.assigneeId) {
+          console.log(`ℹ️ [BullMQ Worker] Task "${task.title}" is unassigned, skipping reminder.`);
+          return;
+        }
+
+        if (!task.dueDate) {
+          console.log(`ℹ️ [BullMQ Worker] Task "${task.title}" has no due date, skipping reminder.`);
+          return;
+        }
+
+        const effectiveAssigneeId = task.assigneeId;
+
         // 1. Create in-app notification in PostgreSQL
         const notification = await prisma.notification.create({
           data: {
-            userId: assigneeId,
+            userId: effectiveAssigneeId,
             type: 'TASK_DUE_SOON',
             title: 'Task Due Soon',
             message: `Task "${task.title}" is due soon! Don't forget to update your progress.`,
@@ -53,7 +65,7 @@ export const initReminderWorker = (): Worker<ReminderJobData> | null => {
         });
 
         // 2. Real-time push via Socket.IO
-        emitToUser(assigneeId, 'notification:received', notification);
+        emitToUser(effectiveAssigneeId, 'notification:received', notification);
 
         // 3. Simulated Email Service (Background job pattern)
         const recipientEmail = assigneeEmail || task.assignee?.email || 'user@example.com';

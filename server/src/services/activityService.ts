@@ -8,11 +8,14 @@ export interface CreateActivityParams {
   entityId: string;
   action: 'CREATED' | 'UPDATED' | 'DELETED' | 'STATUS_CHANGED' | 'ASSIGNED' | 'COMMENTED' | 'JOINED' | 'ADDED';
   metadata?: any;
+  tx?: any;
+  skipEmit?: boolean;
 }
 
 export const recordActivity = async (params: CreateActivityParams) => {
   try {
-    const activity = await prisma.activity.create({
+    const client = params.tx || prisma;
+    const activity = await client.activity.create({
       data: {
         workspaceId: params.workspaceId,
         userId: params.userId,
@@ -28,8 +31,10 @@ export const recordActivity = async (params: CreateActivityParams) => {
       },
     });
 
-    // Real-time broadcast to all connected workspace members
-    emitToWorkspace(params.workspaceId, 'activity:logged', activity);
+    // Real-time broadcast to all connected workspace members (unless skipped for post-commit emission)
+    if (!params.skipEmit) {
+      emitToWorkspace(params.workspaceId, 'activity:logged', activity);
+    }
 
     return activity;
   } catch (error) {
