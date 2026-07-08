@@ -1,6 +1,17 @@
 # SyncSphere — Collaborative Project & Task Workspace
 
+[![validate](https://github.com/TanmayS06/Collaborative-Project-Manager/actions/workflows/validate.yml/badge.svg)](https://github.com/TanmayS06/Collaborative-Project-Manager/actions/workflows/validate.yml)
+
 > A fusion of Trello's agile simplicity, Jira's workflow depth, and Slack-style real-time collaboration.
+
+---
+
+## 🛡️ Enterprise Security & Multi-Tenant Isolation
+- **Strict Workspace Authorization**: Reusable authorization middleware and helpers enforce workspace boundaries across all REST operations (`GET`, `PATCH`, `DELETE` tasks, comments, and project resources).
+- **Cross-Workspace Assignee Validation**: All task creation and assignment updates strictly verify that assigned teammates are registered members of the target workspace.
+- **Socket.IO Room Access Control**: Real-time room joins (`workspace:*`, `project:*`) verify database membership before admitting sockets, preventing unauthorized telemetry and event interception.
+- **Atomic Transactions**: Task updates, comments, and activity audit records execute inside database transactions (`prisma.$transaction`) with post-commit side-effect ordering (socket broadcasts, cache invalidation).
+- **Background Reminder Lifecycle**: BullMQ delayed jobs are synchronized with task state—cancelled immediately upon completion (`DONE`), assignee unassignment, due date clearing, or task deletion.
 
 ---
 
