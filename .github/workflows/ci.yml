@@ -28,7 +28,7 @@ jobs:
         run: npm --prefix server ci
 
       - name: Validate Prisma Schema & Generate Client
-        run: npx --prefix server prisma generate
+        run: npm --prefix server run prisma:generate
 
       - name: Compile Backend TypeScript
         run: npm --prefix server run build
