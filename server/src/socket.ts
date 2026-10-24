@@ -22,9 +22,15 @@ let io: SocketIOServer | null = null;
 const onlinePresence = new Map<string, Map<string, SocketUser & { count: number }>>();
 
 export const initSocket = (httpServer: HTTPServer): SocketIOServer => {
+  const allowedOrigins = [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    process.env.CLIENT_URL,
+  ].filter((origin): origin is string => Boolean(origin));
+
   io = new SocketIOServer(httpServer, {
     cors: {
-      origin: ['http://localhost:3000', 'http://127.0.0.1:3000'],
+      origin: allowedOrigins,
       credentials: true,
       methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE'],
     },
