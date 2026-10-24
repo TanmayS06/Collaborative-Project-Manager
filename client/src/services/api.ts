@@ -1,6 +1,6 @@
 import type { User, Workspace, Project, Task, TaskComment, WorkspaceRole, Notification, TaskAttachment } from '../types';
 
-const API_BASE = '/api';
+const API_BASE = `${(import.meta.env.VITE_API_URL || '').replace(/\/+$/, '')}/api`;
 
 
 class ApiClient {
